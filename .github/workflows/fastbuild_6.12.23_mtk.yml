@@ -260,10 +260,10 @@ jobs:
             curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/refs/heads/main/kernel/setup.sh" | bash -s main
             echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%@cctv18"' >> ./common/arch/arm64/configs/gki_defconfig
             cd ./KernelSU
-            # 上游BakaSU自2026-10-10起在susfs_compat.mk中加入$(error)暂停susfs构建，暂时固定到暂停前的提交，待susfs更新后可移除
-            git checkout 5b76b88
+            # 上游BakaSU自2026-10-10起在susfs_compat.mk中加入$(error)暂停susfs构建，此处删除该拦截以使用最新版BakaSU（待susfs更新后可移除）
+            sed -i '/susfs has NOT update\|Please wait simonpunk update\|Please wait susfs update/d' kernel/tools/susfs_compat.mk
             # 生成自定义版本号（基于提交计数）, 失败时使用 114514
-            KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
+            KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
             # 存储版本号到 GitHub 环境变量
             echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
             echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
@@ -880,8 +880,16 @@ jobs:
           #### ※※※刷写内核有风险，为防止出现意外导致手机变砖，在刷入内核前请务必用[KernelFlasher](https://github.com/capntrips/KernelFlasher)等软件备份boot等关键启动分区!※※※
           EOF
 
+          # 下载最新版BakaSU管理器APK，随内核一并发布（下载失败不影响内核发布）
+          shopt -s nullglob
+          if [[ "${{ github.event.inputs.ksu_type }}" == "bakasu" || "${{ github.event.inputs.ksu_type }}" == "sukisu" ]]; then
+            mkdir -p ksu_manager
+            gh release download --repo cctv18/BakaSU_CI --pattern '*.apk' --dir ksu_manager || echo "BakaSU管理器下载失败，跳过"
+          fi
+          MANAGER_APKS=(ksu_manager/*.apk)
+
           gh release create "${{ env.TAG_HEAD }}-${{ env.TIME }}" \
             --repo "${{ github.repository }}" \
             --title "${{ env.TAG_HEAD }}-${{ env.FULL_VERSION }}" \
             --notes-file release_notes.md \
-            release_zips/AnyKernel3_*.zip
+            release_zips/AnyKernel3_*.zip "${MANAGER_APKS[@]}"
